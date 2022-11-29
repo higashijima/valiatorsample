@@ -1,0 +1,98 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '2.7.5'
+	id 'io.spring.dependency-management' version '1.0.15.RELEASE'
+}
+
+group = 'jp.boctok'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+def loadProperties(properties) {
+	def props = new Properties()
+	file(properties).withInputStream {props.load(it)}
+	return props
+}
+
+def gradleProperties = loadProperties("$rootDir/gradle.properties")
+import org.apache.tools.ant.filters.ReplaceTokens
+processResources {
+	filesMatching('**/application.yml') {
+		filter(
+				ReplaceTokens,
+				tokens: [
+				        'datasourceUrl': "${datasourceUrl}".toString(),
+						'datasourceUser': "${datasourceUser}".toString(),
+						'datasourcePassword': "${datasourcePassword}".toString(),
+						'datasourceDriver': "${datasourceDriver}".toString()
+				]
+		)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+	domaGenRuntime // doma-genを動かすために追加
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// spring initializrで生成
+	implementation 'org.springframework.boot:spring-boot-starter-batch'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	domaGenRuntime 'org.postgresql:postgresql'
+	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.batch:spring-batch-test'
+	// 後から追加
+	// doma, doma-gen
+// https://mvnrepository.com/artifact/org.seasar.doma/doma-processor
+	implementation 'org.seasar.doma:doma-processor:2.53.1'
+// https://mvnrepository.com/artifact/org.seasar.doma/doma-gen
+	domaGenRuntime 'org.seasar.doma:doma-gen:2.28.0'
+// https://mvnrepository.com/artifact/org.seasar.doma/doma
+	implementation 'org.seasar.doma:doma:2.29.0'
+	// DBUnit
+// https://mvnrepository.com/artifact/org.dbunit/dbunit
+	testImplementation 'org.dbunit:dbunit:2.7.3'
+
+	// Spring batch
+// https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-batch
+	implementation 'org.springframework.boot:spring-boot-starter-batch:3.0.0'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+task gen {
+	group = 'doma-nen'
+
+	doLast {
+		ant.taskdef(resource: 'domagentask.properties',
+				classpath: configurations.domaGenRuntime.asPath)
+		ant.gen(
+				url: 'jdbc:postgresql://127.0.0.1/develop',
+				user: 'devuser',
+				password: 'pass',
+				templatePrimaryDir: 'template',
+				tableNamePattern: 'db_sample|sample_tbl') {
+			entityConfig(
+					packageName: 'jp.boctok.validatorsample.generated.entity',
+					overwrite: true,
+					useListener: false
+			)
+			daoConfig(
+					packageName: 'jp.boctok.validatorsample.generated.dao',
+					overwrite: true
+			)
+			sqlConfig()
+		}
+	}
+}
